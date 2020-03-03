@@ -7,7 +7,6 @@ class Gigs::InquiriesController < Gigs::ApplicationController
     before_filter :load_gig,       only: [:create, :new]
   
     def new
-      @inquiry.gig                   = @gig
       @inquiry.deal_possible_fee_min = @gig.deal_possible_fee_min
       @inquiry.artist_contact        = current_profile.last_inquired(:artist_contact)
       @inquiry.travel_party_count    = current_profile.last_inquired(:travel_party_count)
@@ -31,25 +30,20 @@ class Gigs::InquiriesController < Gigs::ApplicationController
   
       @is_matching = GigTest::Matcher.new(@gig, current_profile).matches?
   
-      if current_profile.billing_address.blank? || current_profile.tax_rate.blank?
+      if current_profile.billing_address.blank?
         @profile = current_profile
-        if @profile.billing_address.blank?
-          @profile.build_billing_address
-          @profile.billing_address.name = [
-            @profile.main_user.first_name,
-            @profile.main_user.last_name
-          ].join(' ')
-        end
+        @profile.build_billing_address
+        @profile.billing_address.name = [@profile.main_user.first_name, @profile.main_user.last_name].join(' ')
+      elsif current_profile.tax_rate.blank?
+        @profile = current_profile
       end
   
       GigTest::Intercom::Event::ApplicationSawIncompleteBillingDataWarning.emit(@gig.id, current_profile.id) unless current_profile.has_a_complete_billing_address?
       GigTest::Intercom::Event::ApplicationSawIncompleteEpkWarning.emit(@gig.id, current_profile.id) unless current_profile.epk_complete?
-  
       GigTest::Intercom::Event::ApplicationVisitedGigApplicationForm.emit(@gig.id, current_profile.id) if current_profile.complete_for_inquiry?
     end
   
     def create
-      @inquiry.gig        = @gig
       @inquiry.artist     = current_profile
       @inquiry.user       = current_profile.main_user
       @inquiry.promoter   = @gig.promoter
@@ -109,6 +103,7 @@ class Gigs::InquiriesController < Gigs::ApplicationController
   
     def load_gig
       @gig = Gig.where(slug: params[:gig_id]).first
+      @inquiry.gig = @gig
     end
   
     def paywall_chroot
